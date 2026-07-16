@@ -67,7 +67,7 @@ body {
   color: var(--text-secondary);
   margin-bottom: 6px;
 }
-.login-card input[type="password"] {
+.login-card input {
   width: 100%;
   padding: 12px 16px;
   border: 2px solid var(--border);
@@ -75,8 +75,9 @@ body {
   font-size: 16px;
   outline: none;
   transition: border-color 0.2s;
+  box-sizing: border-box;
 }
-.login-card input[type="password"]:focus {
+.login-card input:focus {
   border-color: var(--primary-light);
 }
 
