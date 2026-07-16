@@ -137,7 +137,7 @@ const App = (() => {
         </div>
       </div>`;
     const c = document.getElementById('regContent');
-    c.innerHTML = `<div class="input-group"><label>用户名（3-20位，字母数字下划线）</label><input type="text" id="regUser" placeholder="例如：zoehii" autocomplete="off"></div>
+    c.innerHTML = `<div class="input-group"><label>用户名（3-20位，字母数字下划线）</label><input type="text" id="regUser" placeholder="例如：cofferuser" autocomplete="off"></div>
       <div class="input-group"><label>密码（至少6位）</label><input type="password" id="regPwd1" placeholder="请输入密码" autocomplete="new-password"></div>
       <div class="input-group"><label>确认密码</label><input type="password" id="regPwd2" placeholder="再次输入密码" autocomplete="new-password"></div>
       <button class="btn btn-primary" id="regBtn" style="width:100%;justify-content:center;padding:12px">&#x1f4dd; 注册</button>
