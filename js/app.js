@@ -7,11 +7,11 @@ const App = (() => {
   let _accounts = [];
   let _snapshots = [];
   let _charts = {};
-  let _isLocked = true;
 
   // ====== 路由表 ======
   const ROUTES = {
     'login':        { title: '登录', render: renderLogin, needAuth: false },
+    'register':     { title: '注册', render: renderRegister, needAuth: false },
     'dashboard':    { title: '资产看板', render: renderDashboard, needAuth: true },
     'accounts':     { title: '账户管理', render: renderAccounts, needAuth: true },
     'snapshots':    { title: '月度快照', render: renderSnapshots, needAuth: true },
@@ -23,11 +23,14 @@ const App = (() => {
   // ====== 初始化 ======
   async function init() {
     try {
-      await DB._getDB();
-      const pwd = await DB.Settings.get('password');
       window.addEventListener('hashchange', handleRoute);
-      if (pwd) { _isLocked = true; navigate('login'); }
-      else { _isLocked = false; navigate('login'); }
+      // 检查 Supabase 会话
+      const { data: { session } } = await supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY).auth.getSession();
+      if (session) {
+        navigate('dashboard');
+      } else {
+        navigate('login');
+      }
     } catch (e) {
       console.error('初始化失败:', e);
       document.getElementById('app').innerHTML =
@@ -38,18 +41,23 @@ const App = (() => {
     }
   }
 
+  async function _isLoggedIn() {
+    const { data: { session } } = await supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY).auth.getSession();
+    return !!session;
+  }
+
   function navigate(route, params = {}) {
     const hash = '#' + route + (Object.keys(params).length ? '?' + new URLSearchParams(params).toString() : '');
     if (window.location.hash !== hash) { window.location.hash = hash; }
     else { handleRoute(); }
   }
 
-  function handleRoute() {
+  async function handleRoute() {
     const hash = window.location.hash.slice(1) || 'dashboard';
     const [base, qs] = hash.split('?');
     const params = Object.fromEntries(new URLSearchParams(qs));
     const route = ROUTES[base] || ROUTES['dashboard'];
-    if (route.needAuth && _isLocked) { navigate('login'); return; }
+    if (route.needAuth && !(await _isLoggedIn())) { navigate('login'); return; }
     _currentRoute = base;
     route.render(params);
     document.querySelectorAll('.nav-item').forEach(el => {
@@ -73,6 +81,7 @@ const App = (() => {
             <a class="nav-item" data-route="investments" onclick="Utils.showToast('投资追踪模块（P2）即将推出','info')"><span class="icon">📈</span><span>投资追踪</span></a>
             <div class="nav-section">系统</div>
             <a class="nav-item" data-route="settings" onclick="App.navigate('settings')"><span class="icon">⚙️</span><span>设置</span></a>
+            <a class="nav-item" onclick="App._logout()"><span class="icon">🚪</span><span>退出登录</span></a>
           </nav>
         </aside>
         <main class="main-content"><div id="pageContent"></div></main>
@@ -83,33 +92,75 @@ const App = (() => {
   }
 
   // ======================== 登录页 ========================
+  // ======================== 登录/注册页 ========================
   function renderLogin() {
     document.getElementById('app').innerHTML = `
       <div class="login-page">
         <div class="login-card">
-          <div class="login-lock-icon">🔒</div>
+          <div class="login-lock-icon">&#x1f512;</div>
           <h1>个人资产管理</h1>
-          <p>${_isLocked ? '请输入密码解锁' : '首次使用，请设置访问密码'}</p>
+          <p>邮箱登录</p>
           <div id="loginContent"></div>
         </div>
       </div>`;
     const c = document.getElementById('loginContent');
-    if (_isLocked) {
-      c.innerHTML = `<div class="input-group"><label>访问密码</label><input type="password" id="loginPwd" placeholder="请输入密码" autofocus></div>
-        <button class="btn btn-primary" id="loginBtn" style="width:100%;justify-content:center;padding:12px">🔓 解锁</button>
-        <p style="margin-top:12px;font-size:12px;color:#999" id="loginError"></p>`;
-      const i = c.querySelector('#loginPwd'), b = c.querySelector('#loginBtn'), e = c.querySelector('#loginError');
-      async function dl() { const p = await DB.Settings.get('password'); if (i.value === p) { _isLocked = false; Utils.showToast('欢迎回来！'); navigate('dashboard'); } else { e.textContent = '⚠️ 密码错误，请重试'; i.value = ''; i.focus(); } }
-      b.onclick = dl; i.onkeydown = (ev) => { if (ev.key === 'Enter') dl(); }; setTimeout(() => i.focus(), 100);
-    } else {
-      c.innerHTML = `<div class="input-group"><label>设置访问密码</label><input type="password" id="newPwd1" placeholder="请输入密码" autofocus></div>
-        <div class="input-group"><label>确认密码</label><input type="password" id="newPwd2" placeholder="再次输入密码"></div>
-        <button class="btn btn-primary" id="setPwdBtn" style="width:100%;justify-content:center;padding:12px">🔐 确认并进入</button>
-        <p style="margin-top:12px;font-size:12px;color:#999" id="loginError"></p>`;
-      const p1=c.querySelector('#newPwd1'), p2=c.querySelector('#newPwd2'), b=c.querySelector('#setPwdBtn'), e=c.querySelector('#loginError');
-      async function ds() { if(!p1.value||p1.value.length<4){e.textContent='⚠️ 密码至少4位字符';return;} if(p1.value!==p2.value){e.textContent='⚠️ 两次密码不一致';return;} await DB.Settings.set('password',p1.value); await DB.Accounts.initDefaults(); _isLocked=false; Utils.showToast('🎉 设置成功！'); navigate('dashboard'); }
-      b.onclick=ds; p1.onkeydown=(ev)=>{if(ev.key==='Enter')p2.focus();}; p2.onkeydown=(ev)=>{if(ev.key==='Enter')ds();}; setTimeout(()=>p1.focus(),100);
+    c.innerHTML = `<div class="input-group"><label>邮箱</label><input type="email" id="loginEmail" placeholder="your@email.com"></div>
+      <div class="input-group"><label>密码</label><input type="password" id="loginPwd" placeholder="请输入密码"></div>
+      <button class="btn btn-primary" id="loginBtn" style="width:100%;justify-content:center;padding:12px">&#x1f513; 登录</button>
+      <p style="margin-top:12px;font-size:12px;color:#999;text-align:center" id="loginError"></p>
+      <p style="text-align:center;font-size:13px;margin-top:8px">没有账号？<a href="#register" style="color:#1976D2;cursor:pointer">注册</a></p>`;
+    const email = c.querySelector('#loginEmail'), pwd = c.querySelector('#loginPwd'),
+          btn = c.querySelector('#loginBtn'), err = c.querySelector('#loginError');
+    async function doLogin() {
+      const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+      const { error } = await client.auth.signInWithPassword({ email: email.value, password: pwd.value });
+      if (error) { err.textContent = '&#x26a0;&#xfe0f; ' + (error.message === 'Invalid login credentials' ? '邮箱或密码错误' : error.message); return; }
+      Utils.showToast('&#x2705; 欢迎回来！');
+      navigate('dashboard');
     }
+    btn.onclick = doLogin;
+    [email, pwd].forEach(el => el.onkeydown = (ev) => { if (ev.key === 'Enter') doLogin(); });
+    setTimeout(() => email.focus(), 100);
+  }
+
+  function renderRegister() {
+    document.getElementById('app').innerHTML = `
+      <div class="login-page">
+        <div class="login-card">
+          <div class="login-lock-icon">&#x1f4dd;</div>
+          <h1>注册账号</h1>
+          <p>创建你的 Coffer 账户</p>
+          <div id="regContent"></div>
+        </div>
+      </div>`;
+    const c = document.getElementById('regContent');
+    c.innerHTML = `<div class="input-group"><label>邮箱</label><input type="email" id="regEmail" placeholder="your@email.com"></div>
+      <div class="input-group"><label>密码（至少6位）</label><input type="password" id="regPwd1" placeholder="请输入密码"></div>
+      <div class="input-group"><label>确认密码</label><input type="password" id="regPwd2" placeholder="再次输入密码"></div>
+      <button class="btn btn-primary" id="regBtn" style="width:100%;justify-content:center;padding:12px">&#x1f4dd; 注册</button>
+      <p style="margin-top:12px;font-size:12px;color:#999;text-align:center" id="regError"></p>
+      <p style="text-align:center;font-size:13px;margin-top:8px">已有账号？<a href="#login" style="color:#1976D2;cursor:pointer">登录</a></p>`;
+    const email = c.querySelector('#regEmail'), p1 = c.querySelector('#regPwd1'),
+          p2 = c.querySelector('#regPwd2'), btn = c.querySelector('#regBtn'), err = c.querySelector('#regError');
+    async function doReg() {
+      if (!email.value) { err.textContent = '请输入邮箱'; return; }
+      if (p1.value.length < 6) { err.textContent = '密码至少6位'; return; }
+      if (p1.value !== p2.value) { err.textContent = '两次密码不一致'; return; }
+      const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+      const { error } = await client.auth.signUp({ email: email.value, password: p1.value });
+      if (error) { err.textContent = '&#x26a0;&#xfe0f; ' + error.message; return; }
+      Utils.showToast('&#x2705; 注册成功！首次登录将创建默认账户');
+      await DB.Accounts.initDefaults();
+      navigate('dashboard');
+    }
+    btn.onclick = doReg;
+    [email, p1, p2].forEach(el => el.onkeydown = (ev) => { if (ev.key === 'Enter') doReg(); });
+  }
+
+  async function _logout() {
+    const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    await client.auth.signOut();
+    navigate('login');
   }
 
   // ======================== 资产看板 ========================
@@ -1372,5 +1423,5 @@ const App = (() => {
   }
 
   // ====== 公开 API ======
-  return { init, navigate, showAccountPicker, showAccountForm, deleteAccount, deleteSnapshot, resetDefaults, _dragStart, _dragOver, _drop, _dragEnd, _pickAccount, _pickCustom, _inlineEditCat, _inlineAddCat, _confirmAddCat, _deleteCategory, _restoreCategoryDefaults, renderAccounts };
+  return { init, navigate, showAccountPicker, showAccountForm, deleteAccount, deleteSnapshot, resetDefaults, _dragStart, _dragOver, _drop, _dragEnd, _pickAccount, _pickCustom, _inlineEditCat, _inlineAddCat, _confirmAddCat, _deleteCategory, _restoreCategoryDefaults, renderAccounts, _logout };
 })();

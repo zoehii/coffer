@@ -3,9 +3,12 @@
  */
 const CONFIG = {
   APP_NAME: '个人资产管理',
-  VERSION: '1.1.0',
+  VERSION: '2.0.0',
   DB_NAME: 'PersonalAssetsDB',
   DB_VERSION: 2,
+
+  SUPABASE_URL: 'https://owidmewjfgvekhpjoxgu.supabase.co',
+  SUPABASE_ANON_KEY: 'sb_publishable_RhhnLTk6OSQpnSU0AkvHow_jHFdfFY2',
 
   // 一级分类
   CATEGORY1: {
@@ -83,6 +86,7 @@ const CONFIG = {
   // 页面路由
   ROUTES: {
     LOGIN: 'login',
+    REGISTER: 'register',
     DASHBOARD: 'dashboard',
     ACCOUNTS: 'accounts',
     SNAPSHOTS: 'snapshots',
