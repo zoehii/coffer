@@ -98,29 +98,32 @@ const App = (() => {
       <div class="login-page">
         <div class="login-card">
           <div class="login-lock-icon">&#x1f512;</div>
-          <h1>个人资产管理</h1>
-          <p>邮箱登录</p>
+          <h1>Coffer</h1>
+          <p>用户名登录</p>
           <div id="loginContent"></div>
         </div>
       </div>`;
     const c = document.getElementById('loginContent');
-    c.innerHTML = `<div class="input-group"><label>邮箱</label><input type="email" id="loginEmail" placeholder="your@email.com"></div>
-      <div class="input-group"><label>密码</label><input type="password" id="loginPwd" placeholder="请输入密码"></div>
+    c.innerHTML = `<div class="input-group"><label>用户名</label><input type="text" id="loginUser" placeholder="请输入用户名" autocomplete="username"></div>
+      <div class="input-group"><label>密码</label><input type="password" id="loginPwd" placeholder="请输入密码" autocomplete="current-password"></div>
       <button class="btn btn-primary" id="loginBtn" style="width:100%;justify-content:center;padding:12px">&#x1f513; 登录</button>
       <p style="margin-top:12px;font-size:12px;color:#999;text-align:center" id="loginError"></p>
       <p style="text-align:center;font-size:13px;margin-top:8px">没有账号？<a href="#register" style="color:#1976D2;cursor:pointer">注册</a></p>`;
-    const email = c.querySelector('#loginEmail'), pwd = c.querySelector('#loginPwd'),
+    const user = c.querySelector('#loginUser'), pwd = c.querySelector('#loginPwd'),
           btn = c.querySelector('#loginBtn'), err = c.querySelector('#loginError');
     async function doLogin() {
+      const username = user.value.trim();
+      if (!username) { err.textContent = '请输入用户名'; return; }
       const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
-      const { error } = await client.auth.signInWithPassword({ email: email.value, password: pwd.value });
-      if (error) { err.textContent = '&#x26a0;&#xfe0f; ' + (error.message === 'Invalid login credentials' ? '邮箱或密码错误' : error.message); return; }
+      const email = username + '@coffer.app';
+      const { error } = await client.auth.signInWithPassword({ email, password: pwd.value });
+      if (error) { err.textContent = '&#x26a0;&#xfe0f; ' + (error.message === 'Invalid login credentials' ? '用户名或密码错误' : error.message); return; }
       Utils.showToast('&#x2705; 欢迎回来！');
       navigate('dashboard');
     }
     btn.onclick = doLogin;
-    [email, pwd].forEach(el => el.onkeydown = (ev) => { if (ev.key === 'Enter') doLogin(); });
-    setTimeout(() => email.focus(), 100);
+    [user, pwd].forEach(el => el.onkeydown = (ev) => { if (ev.key === 'Enter') doLogin(); });
+    setTimeout(() => user.focus(), 100);
   }
 
   function renderRegister() {
@@ -134,27 +137,34 @@ const App = (() => {
         </div>
       </div>`;
     const c = document.getElementById('regContent');
-    c.innerHTML = `<div class="input-group"><label>邮箱</label><input type="email" id="regEmail" placeholder="your@email.com"></div>
-      <div class="input-group"><label>密码（至少6位）</label><input type="password" id="regPwd1" placeholder="请输入密码"></div>
-      <div class="input-group"><label>确认密码</label><input type="password" id="regPwd2" placeholder="再次输入密码"></div>
+    c.innerHTML = `<div class="input-group"><label>用户名（3-20位，字母数字下划线）</label><input type="text" id="regUser" placeholder="例如：zoehii" autocomplete="off"></div>
+      <div class="input-group"><label>密码（至少6位）</label><input type="password" id="regPwd1" placeholder="请输入密码" autocomplete="new-password"></div>
+      <div class="input-group"><label>确认密码</label><input type="password" id="regPwd2" placeholder="再次输入密码" autocomplete="new-password"></div>
       <button class="btn btn-primary" id="regBtn" style="width:100%;justify-content:center;padding:12px">&#x1f4dd; 注册</button>
       <p style="margin-top:12px;font-size:12px;color:#999;text-align:center" id="regError"></p>
       <p style="text-align:center;font-size:13px;margin-top:8px">已有账号？<a href="#login" style="color:#1976D2;cursor:pointer">登录</a></p>`;
-    const email = c.querySelector('#regEmail'), p1 = c.querySelector('#regPwd1'),
+    const user = c.querySelector('#regUser'), p1 = c.querySelector('#regPwd1'),
           p2 = c.querySelector('#regPwd2'), btn = c.querySelector('#regBtn'), err = c.querySelector('#regError');
     async function doReg() {
-      if (!email.value) { err.textContent = '请输入邮箱'; return; }
+      const username = user.value.trim();
+      if (!username) { err.textContent = '请输入用户名'; return; }
+      if (!/^[a-zA-Z0-9_-]{3,20}$/.test(username)) { err.textContent = '用户名需3-20位，仅字母数字下划线'; return; }
       if (p1.value.length < 6) { err.textContent = '密码至少6位'; return; }
       if (p1.value !== p2.value) { err.textContent = '两次密码不一致'; return; }
       const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
-      const { error } = await client.auth.signUp({ email: email.value, password: p1.value });
-      if (error) { err.textContent = '&#x26a0;&#xfe0f; ' + error.message; return; }
-      Utils.showToast('&#x2705; 注册成功！首次登录将创建默认账户');
+      const email = username + '@coffer.app';
+      const { error } = await client.auth.signUp({ email, password: p1.value, options: { data: { username } } });
+      if (error) {
+        if (error.message.includes('already been registered')) err.textContent = '&#x26a0;&#xfe0f; 用户名已被占用，请换一个';
+        else err.textContent = '&#x26a0;&#xfe0f; ' + error.message;
+        return;
+      }
+      Utils.showToast('&#x2705; 注册成功！');
       await DB.Accounts.initDefaults();
       navigate('dashboard');
     }
     btn.onclick = doReg;
-    [email, p1, p2].forEach(el => el.onkeydown = (ev) => { if (ev.key === 'Enter') doReg(); });
+    [user, p1, p2].forEach(el => el.onkeydown = (ev) => { if (ev.key === 'Enter') doReg(); });
   }
 
   async function _logout() {
