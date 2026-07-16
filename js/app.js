@@ -21,11 +21,16 @@ const App = (() => {
   };
 
   // ====== 初始化 ======
+  let _supabaseClient = null;
+  function _getSupabase() {
+    if (!_supabaseClient) _supabaseClient = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    return _supabaseClient;
+  }
+
   async function init() {
     try {
       window.addEventListener('hashchange', handleRoute);
-      // 检查 Supabase 会话
-      const { data: { session } } = await supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY).auth.getSession();
+      const { data: { session } } = await _getSupabase().auth.getSession();
       if (session) {
         navigate('dashboard');
       } else {
@@ -42,7 +47,7 @@ const App = (() => {
   }
 
   async function _isLoggedIn() {
-    const { data: { session } } = await supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY).auth.getSession();
+    const { data: { session } } = await _getSupabase().auth.getSession();
     return !!session;
   }
 
@@ -114,7 +119,7 @@ const App = (() => {
     async function doLogin() {
       const username = user.value.trim();
       if (!username) { err.textContent = '请输入用户名'; return; }
-      const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+      const client = _getSupabase();
       const email = username + '@coffer.app';
       const { error } = await client.auth.signInWithPassword({ email, password: pwd.value });
       if (error) { err.textContent = '&#x26a0;&#xfe0f; ' + (error.message === 'Invalid login credentials' ? '用户名或密码错误' : error.message); return; }
@@ -151,15 +156,19 @@ const App = (() => {
       if (!/^[a-zA-Z0-9_-]{3,20}$/.test(username)) { err.textContent = '用户名需3-20位，仅字母数字下划线'; return; }
       if (p1.value.length < 6) { err.textContent = '密码至少6位'; return; }
       if (p1.value !== p2.value) { err.textContent = '两次密码不一致'; return; }
-      const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+      const client = _getSupabase();
       const email = username + '@coffer.app';
-      const { error } = await client.auth.signUp({ email, password: p1.value, options: { data: { username } } });
+      const { data: signUpData, error } = await client.auth.signUp({ email, password: p1.value, options: { data: { username } } });
       if (error) {
-        if (error.message.includes('already been registered')) err.textContent = '&#x26a0;&#xfe0f; 用户名已被占用，请换一个';
-        else err.textContent = '&#x26a0;&#xfe0f; ' + error.message;
+        if (error.message.includes('already been registered')) err.textContent = '⚠️ 用户名已被占用，请换一个';
+        else err.textContent = '⚠️ ' + error.message;
         return;
       }
-      Utils.showToast('&#x2705; 注册成功！');
+      // signUp 可能不自动登录，立即手动登录
+      if (!signUpData.session) {
+        await client.auth.signInWithPassword({ email, password: p1.value });
+      }
+      Utils.showToast('✅ 注册成功！');
       await DB.Accounts.initDefaults();
       navigate('dashboard');
     }
@@ -168,7 +177,7 @@ const App = (() => {
   }
 
   async function _logout() {
-    const client = supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+    const client = _getSupabase();
     await client.auth.signOut();
     navigate('login');
   }
